@@ -1,69 +1,68 @@
 #!/bin/bash
 
-# === Konfigurasi Umum ===
-TROJAN_BIN="/usr/local/bin/trojan-go"
-CONFIG_PATH="/etc/trojan-go/config.json"
-CERT_PATH="/etc/ssl/private/trojan-go-cert.pem"
-KEY_PATH="/etc/ssl/private/trojan-go-key.pem"
-WS_PATH="/axisws"
-PASSWORD="freenetaxis2025"
-MULTI_HOST='[
-  "api.ovo.id",
-  "my.udemy.com",
-  "dev.appsflyer.com"
-]'
+# Install dependencies
+apt update && apt upgrade -y
+apt install -y curl wget unzip systemd
 
-# === Cek Binary ===
-if [ ! -f "$TROJAN_BIN" ]; then
-    echo "❌ Trojan-Go tidak ditemukan di $TROJAN_BIN"
-    exit 1
-fi
+# Install Trojan-Go (latest)
+wget https://github.com/p4gefau1t/trojan-go/releases/latest/download/trojan-go-linux-amd64.zip
+unzip trojan-go-linux-amd64.zip
+mv trojan-go /usr/local/bin/
+chmod +x /usr/local/bin/trojan-go
+rm trojan-go-linux-amd64.zip
 
-# === Generate Sertifikat Dummy Jika Tidak Ada ===
-if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ]; then
-    echo "🔧 Membuat sertifikat SSL dummy..."
-    mkdir -p /etc/ssl/private
-    openssl req -newkey rsa:2048 -nodes -keyout "$KEY_PATH" \
-        -x509 -days 365 -out "$CERT_PATH" -subj "/CN=localhost"
-fi
-
-# === Buat ulang config.json ===
-echo "🛠️ Membuat konfigurasi Trojan-Go baru..."
-cat <<EOF > "$CONFIG_PATH"
+# Setup Trojan-Go config file
+cat > /etc/trojan-go/config.json <<EOF
 {
   "run_type": "server",
   "local_addr": "0.0.0.0",
   "local_port": 443,
   "remote_addr": "127.0.0.1",
   "remote_port": 80,
-  "password": [
-    "$PASSWORD"
-  ],
+  "password": ["ganti-password-kamu"],
+  "disable_http_check": true,
+  "udp_timeout": 60,
   "ssl": {
-    "cert": "$CERT_PATH",
-    "key": "$KEY_PATH",
-    "sni": "api.ovo.id"
+    "enabled": false
   },
   "websocket": {
     "enabled": true,
-    "path": "$WS_PATH",
-    "host": $MULTI_HOST
+    "path": "/ws",
+    "host": "api.ovo.id"
   },
   "router": {
     "enabled": true,
     "block": [],
-    "allow": [],
-    "geoip": false,
-    "geosite": false
+    "proxy": [],
+    "direct": ["api.ovo.id", "my.udemy.com", "dev.appsflyer.com"]
   }
 }
 EOF
 
-# === Reload & Restart Trojan-Go ===
-echo "🔄 Restarting Trojan-Go service..."
-systemctl daemon-reload
-systemctl restart trojan-go
+# Create systemd service for Trojan-Go
+cat > /etc/systemd/system/trojan-go.service <<EOF
+[Unit]
+Description=Trojan-Go Server
+After=network.target
 
-# === Tampilkan Status ===
-sleep 2
-systemctl status trojan-go --no-pager -l
+[Service]
+ExecStart=/usr/local/bin/trojan-go -config /etc/trojan-go/config.json
+Restart=on-failure
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload systemd and enable Trojan-Go service
+systemctl daemon-reload
+systemctl enable trojan-go
+systemctl start trojan-go
+
+# Check if Trojan-Go is running
+systemctl status trojan-go
+EOF
+
+3. **Beri izin eksekusi** pada script:
+```bash
+chmod +x trojan-go-setup.sh
